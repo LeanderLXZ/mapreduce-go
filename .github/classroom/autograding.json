@@ -1,0 +1,64 @@
+{
+  "tests": [
+    {
+      "name": "TestBuildMR",
+      "setup": "",
+      "run": "make TestBuildMR",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 3,
+      "points": null
+    },
+    {
+      "name": "TestWC",
+      "setup": "",
+      "run": "make TestWC",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 5,
+      "points": null
+    },
+    {
+      "name": "TestIndexer",
+      "setup": "",
+      "run": "make TestIndexer",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 5,
+      "points": null
+    },
+    {
+      "name": "TestMapParallelism",
+      "setup": "",
+      "run": "make TestMapParallelism",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 5,
+      "points": null
+    },
+    {
+      "name": "TestReduceParallelism",
+      "setup": "",
+      "run": "make TestReduceParallelism",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 5,
+      "points": null
+    },
+    {
+      "name": "TestCrash",
+      "setup": "",
+      "run": "make TestCrash",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 5,
+      "points": null
+    }
+  ]
+}
