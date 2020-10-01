@@ -9,3 +9,4 @@
         steps:
           - uses: actions/checkout@v2
           - uses: education/autograding@v1
+        timeout-minutes: 5

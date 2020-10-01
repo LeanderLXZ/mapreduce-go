@@ -21,14 +21,18 @@ type RegisterWorkerArgs struct {
 }
 
 type RegisterWorkerReply struct {
-	WorkerID int
+	nReduce  int
+	workerId int
 	// InputFiles []string
 }
 
 type RequestTaskArgs struct {
+	workerId int
 }
 
 type RequestTaskReply struct {
+	fileName string
+	taskId   int
 }
 
 type ReportTaskArgs struct {

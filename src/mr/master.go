@@ -86,10 +86,9 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 
-	m.inputFiles = files
 	// Your code here.
-
-	m.workerNum = 0 //initate workerNum
+	m.inputFiles = files
+	m.workerNum = 0
 
 	go m.server()
 

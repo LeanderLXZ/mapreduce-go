@@ -1,10 +1,13 @@
 package mr
 
 import (
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io/ioutil"
 	"log"
 	"net/rpc"
+	"os"
 )
 
 //
@@ -29,21 +32,75 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	// Your worker implementation here.
 
-	// uncomment to send the Example RPC to the master.
-	CallExample()
+	// TODO: register workers for map
+	nReduce, workerId := Register()
 
-	RegWorker()
+	// TODO: Request map task
+	filename, taskId := Request(workerId)
+
+	// Map
+	intermediate := []KeyValue{}
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	kva := mapf(filename, string(content))
+	intermediate = append(intermediate, kva...)
+
+	// Split keys to nReduce files
+	imFiles := make([][]KeyValue, nReduce)
+	for i := 0; i < len(intermediate); i++ {
+		kv := intermediate[i]
+		r := ihash(kv.Key) % nReduce
+		imFiles[r] = append(imFiles[r], kv)
+	}
+
+	// Generate intermediate files for nReduce workers
+	for i := 0; i < nReduce; i++ {
+		imFileName := fmt.Sprintf("mr-%v-%v", taskId, i)
+		imFile, _ := os.Create(imFileName)
+		enc := json.NewEncoder(imFile)
+		for _, kv := range imFiles[i] {
+			err := enc.Encode(&kv)
+		}
+		imFile.Close()
+	}
+
+	// uncomment to send the Example RPC to the master.
+	// CallExample()
+
 }
-func RegWorker() {
+
+func Register() (int, int) {
 	args := RegisterWorkerArgs{}
 	reply := RegisterWorkerReply{}
 
 	// send the RPC request, wait for the reply.
-	call("Master.RegisterWorker", &args, &reply)
+	flag := call("Master.RegisterWorker", &args, &reply)
 
 	// WorkerId := reply.WorkerID
-	DPrintf("Got WorkerId %v\n", reply.WorkerID)
+	DPrintf("Got WorkerId %v\n", reply.workerId)
 	// DPrintf("Got a list of files %v\n", reply.InputFiles)
+
+	return reply.nReduce, reply.workerId
+
+}
+
+func Request(workerId int) (string, int) {
+
+	args := RequestTaskArgs{
+		workerId: workerId,
+	}
+	reply := RequestTaskReply{}
+
+	flag := call("Master.RequestTask", &args, &reply)
+
+	return reply.fileName, reply.taskId
 
 }
 
