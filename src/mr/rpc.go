@@ -39,6 +39,7 @@ type RequestTaskReply struct {
 type ReportTaskArgs struct {
 	workerID int
 	taskID   int
+	taskMode string
 	msg      string
 }
 
