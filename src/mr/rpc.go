@@ -18,27 +18,22 @@ type ExampleReply struct {
 }
 
 type RegisterWorkerArgs struct {
-
 }
 
 type RegisterWorkerReply struct {
-
+	InputFiles []string
 }
 
 type RequestTaskArgs struct {
-
 }
 
 type RequestTaskReply struct {
-
 }
 
 type ReportTaskArgs struct {
-
 }
 
 type ReportTaskReply struct {
-
 }
-// Add your RPC definitions here.
 
+// Add your RPC definitions here.

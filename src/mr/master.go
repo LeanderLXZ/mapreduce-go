@@ -2,16 +2,15 @@ package mr
 
 import (
 	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
 )
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
 
 type Master struct {
 	// Your definitions here.
-
+	inputFiles []string
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -21,9 +20,9 @@ type Master struct {
 //
 func (m *Master) Example(args *ExampleArgs, reply *ExampleReply) error {
 	reply.Y = args.X + 1
+	DPrintf("Worker has called the Example RPC\n")
 	return nil
 }
-
 
 //
 // start a thread that listens for RPCs from worker.go
@@ -49,13 +48,14 @@ func (m *Master) Done() bool {
 
 	// Your code here.
 
-
 	return ret
 }
 
 //RegisterWorker is an RPC method that is called by workers after they have started
 // up to report that they are ready to receive tasks.
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
+	reply.InputFiles = m.inputFiles
+	DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
 }
 
@@ -77,8 +77,10 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 
+	m.inputFiles = files
 	// Your code here.
 
+	go m.server()
 
 	return &m
 }
