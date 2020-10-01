@@ -32,6 +32,7 @@ type RequestTaskArgs struct {
 
 type RequestTaskReply struct {
 	fileName string
+	taskMode string
 	taskId   int
 }
 
