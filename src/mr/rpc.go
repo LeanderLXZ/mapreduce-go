@@ -44,6 +44,7 @@ type ReportTaskArgs struct {
 }
 
 type ReportTaskReply struct {
+	taskMode string
 }
 
 // Add your RPC definitions here.
