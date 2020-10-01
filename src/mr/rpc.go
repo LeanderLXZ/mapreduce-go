@@ -39,8 +39,7 @@ type RequestTaskReply struct {
 type ReportTaskArgs struct {
 	workerID int
 	taskID   int
-	finished bool
-	failed   bool
+	msg      string
 }
 
 type ReportTaskReply struct {

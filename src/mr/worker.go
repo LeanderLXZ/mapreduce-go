@@ -53,7 +53,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		intermediate := []KeyValue{}
 		file, err := os.Open(fileName)
 		if err != nil {
-			log.Fatalf("cannot open %v", fileName)
+			Report(workerID, taskID, "failed")
 		}
 		content, err := ioutil.ReadAll(file)
 		if err != nil {
@@ -162,10 +162,11 @@ func Request(workerID int) (string, string, int) {
 	return fileName, taskMode, taskID
 }
 
-func Report(workerID int) {
+func Report(workerID int, taskID int, msg string) {
 	args := ReportTaskArgs{
-		workerID: workerID
-		finished:
+		workerID: workerID,
+		taskID:   taskID,
+		msg:      msg,
 	}
 	reply := ReportTaskReply{}
 	for call("Master.ReportTask", &args, &reply) == false {
