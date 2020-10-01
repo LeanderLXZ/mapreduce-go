@@ -6,11 +6,16 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 )
 
 type Master struct {
 	// Your definitions here.
 	inputFiles []string
+	workerNum  int
+	RWMutex    sync.Mutex
+	RQTMutex   sync.Mutex
+	RPTMutex   sync.Mutex
 }
 
 // Your code here -- RPC handlers for the worker to call.
@@ -54,8 +59,12 @@ func (m *Master) Done() bool {
 //RegisterWorker is an RPC method that is called by workers after they have started
 // up to report that they are ready to receive tasks.
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
-	reply.InputFiles = m.inputFiles
-	DPrintf("Sending file list: %v\n", reply.InputFiles)
+	m.RWMutex.Lock()
+	m.workerNum++
+	reply.WorkerID = m.workerNum
+	// reply.InputFiles = m.inputFiles
+	m.RWMutex.Unlock()
+	// DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
 }
 
@@ -79,6 +88,8 @@ func MakeMaster(files []string, nReduce int) *Master {
 
 	m.inputFiles = files
 	// Your code here.
+
+	m.workerNum = 0 //initate workerNum
 
 	go m.server()
 

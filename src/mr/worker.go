@@ -41,7 +41,9 @@ func RegWorker() {
 	// send the RPC request, wait for the reply.
 	call("Master.RegisterWorker", &args, &reply)
 
-	DPrintf("Got a list of files %v\n", reply.InputFiles)
+	// WorkerId := reply.WorkerID
+	DPrintf("Got WorkerId %v\n", reply.WorkerID)
+	// DPrintf("Got a list of files %v\n", reply.InputFiles)
 
 }
 

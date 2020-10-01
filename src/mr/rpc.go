@@ -21,7 +21,8 @@ type RegisterWorkerArgs struct {
 }
 
 type RegisterWorkerReply struct {
-	InputFiles []string
+	WorkerID int
+	// InputFiles []string
 }
 
 type RequestTaskArgs struct {
