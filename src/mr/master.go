@@ -61,7 +61,7 @@ func (m *Master) Done() bool {
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
 	m.RWMutex.Lock()
 	m.workerNum++
-	reply.WorkerID = m.workerNum
+	reply.workerID = m.workerNum
 	// reply.InputFiles = m.inputFiles
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)

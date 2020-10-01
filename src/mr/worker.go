@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
+	"time"
 )
 
 //
@@ -42,10 +43,10 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Your worker implementation here.
 
 	// TODO: register workers for map
-	nReduce, workerId := Register()
+	nReduce, workerID := Register()
 
 	// TODO: Request map task
-	fileName, taskMode, taskId := Request(workerId)
+	fileName, taskMode, taskID := Request(workerID)
 
 	if taskMode == "map" {
 		// Map
@@ -72,7 +73,7 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		// Generate intermediate files for nReduce workers
 		for i := 0; i < nReduce; i++ {
-			imFileName := fmt.Sprintf("mr-%v-%v", taskId, i)
+			imFileName := fmt.Sprintf("mr-%v-%v", taskID, i)
 			imFile, _ := os.Create(imFileName)
 			enc := json.NewEncoder(imFile)
 			for _, kv := range imFiles[i] {
@@ -100,7 +101,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		sort.Sort(ByKey(intermediate))
 
 		// Reduce
-		outputName := fmt.Sprintf("mr-out-%v", taskId)
+		outputName := fmt.Sprintf("mr-out-%v", taskID)
 		outputFile, _ := os.Create(outputName)
 		i := 0
 		for i < len(intermediate) {
@@ -134,31 +135,42 @@ func Register() (int, int) {
 	reply := RegisterWorkerReply{}
 
 	// send the RPC request, wait for the reply.
-	flag := call("Master.RegisterWorker", &args, &reply)
+	for call("Master.RegisterWorker", &args, &reply) == false {
+		time.Sleep(time.Second)
+	}
 
-	// WorkerId := reply.WorkerID
-	DPrintf("Got WorkerId %v\n", reply.workerId)
+	// workerID := reply.workerID
+	DPrintf("Got workerID %v\n", reply.workerID)
 	// DPrintf("Got a list of files %v\n", reply.InputFiles)
 
-	return reply.nReduce, reply.workerId
-
+	nReduce := reply.nReduce
+	workerID := reply.workerID
+	return nReduce, workerID
 }
 
-func Request(workerId int) (string, string, int) {
-
+func Request(workerID int) (string, string, int) {
 	args := RequestTaskArgs{
-		workerId: workerId,
+		workerID: workerID,
 	}
 	reply := RequestTaskReply{}
+	for call("Master.RequestTask", &args, &reply) == false {
+		time.Sleep(time.Second)
+	}
+	fileName := reply.fileName
+	taskMode := reply.taskMode
+	taskID := reply.taskID
+	return fileName, taskMode, taskID
+}
 
-	flag := call("Master.RequestTask", &args, &reply)
-
-	fileName = reply.fileName
-	taskMode = reply.taskMode
-	taskID = reply.taskId
-
-	return fileName, taskMode, taskId
-
+func Report(workerID int) {
+	args := ReportTaskArgs{
+		workerID: workerID
+		finished:
+	}
+	reply := ReportTaskReply{}
+	for call("Master.ReportTask", &args, &reply) == false {
+		time.Sleep(time.Second)
+	}
 }
 
 //
