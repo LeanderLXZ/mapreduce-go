@@ -87,11 +87,11 @@ func Worker(mapf func(string, string) []KeyValue,
 			}
 
 			// Generate intermediate files for nReduce workers
-			for i := 0; i < nReduce; i++ {
-				imFileName := fmt.Sprintf("mr-%v-%v", taskId, i)
+			for r := 0; r < nReduce; r++ {
+				imFileName := fmt.Sprintf("mr-%v-%v", taskId, r)
 				imFile, _ := os.Create(imFileName)
 				enc := json.NewEncoder(imFile)
-				for _, kv := range imFiles[i] {
+				for _, kv := range imFiles[r] {
 					enc.Encode(&kv)
 				}
 				imFile.Close()

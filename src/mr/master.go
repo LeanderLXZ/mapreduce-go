@@ -1,21 +1,26 @@
 package mr
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Master struct {
 	// Your definitions here.
-	inputFiles []string //rest files list
+	fileList   []string //rest files list
 	taskList   []Task   //working files--workerId list
 	workerList []int
 
+	nReduce   int
 	workerNum int
 	taskId    int
 	mapDone   bool
@@ -66,7 +71,8 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 	m.RWMutex.Lock()
 	m.workerNum++
 	reply.workerId = m.workerNum
-	// reply.InputFiles = m.inputFiles
+	reply.nReduce = m.nReduce
+	// reply.InputFiles = m.fileList
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
@@ -77,33 +83,33 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 	m.RQTMutex.Lock()
 	if m.allDone == false {
 		if m.mapDone == false { //map task
-			if len(m.inputFiles) != 0 {
+			if len(m.fileList) != 0 {
 				m.taskId++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.inputFiles[0], args.workerId, time}
+				task := Task{m.taskId, m.fileList[0], args.workerId, time}
 
 				reply.fileName = task.files
 				reply.taskMode = "map"
 				reply.taskId = task.taskId
 
-				m.inputFiles = m.inputFiles[1:]
+				m.fileList = m.fileList[1:]
 				//workerlist update, do I need workerlist?
 				m.taskList = append(m.taskList, task)
 			} else {
-				// tell worker wait new task
+				// tell worker to wait new task
 				reply.taskMode = "wait"
 			}
 		} else { //reduce task
-			if len(m.inputFiles) != 0 {
+			if len(m.fileList) != 0 {
 				m.taskId++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.inputFiles[0], args.workerId, time}
+				task := Task{m.taskId, m.fileList[0], args.workerId, time}
 
 				reply.fileName = task.files
 				reply.taskMode = "reduce"
 				reply.taskId = task.taskId
 
-				m.inputFiles = m.inputFiles[1:]
+				m.fileList = m.fileList[1:]
 				m.taskList = append(m.taskList, task)
 			} else {
 				// tell worker wait new task
@@ -112,6 +118,7 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 		}
 	} else { // Alldone
 		reply.taskMode = "done"
+		m.ClearIntermediate()
 	}
 
 	m.RQTMutex.Unlock()
@@ -143,9 +150,37 @@ func CheckTaskList(taskList []Task, taskId int) (string, int, int64) {
 }
 
 func (m *Master) UpdateTaskMode() error {
-	if len(m.inputFiles) == 0 && len(m.taskList) == 0 {
+	if len(m.fileList) == 0 && len(m.taskList) == 0 {
 		m.mapDone = true
+		files, _ := ioutil.ReadDir("./")
 
+		// Update the filelist to reduce files
+		rFileList := make([]string, m.nReduce)
+		for r := 0; r < m.nReduce; r++ {
+			for _, f := range files {
+				pattern := fmt.Sprintf("mr-\\d*-%v", r)
+				matched, _ := regexp.MatchString(pattern, f.Name())
+				if matched == true {
+					rFileList[r] = strings.Join([]string{rFileList[r], f.Name()}, " ")
+				}
+			}
+		}
+		m.fileList = rFileList
+	}
+	return nil
+}
+
+func (m *Master) ClearIntermediate() error {
+	// Update the filelist to reduce files
+	for r := 0; r < m.nReduce; r++ {
+		files, _ := ioutil.ReadDir("./")
+		for _, f := range files {
+			pattern := fmt.Sprintf("mr-\\d*-%v", r)
+			matched, _ := regexp.MatchString(pattern, f.Name())
+			if matched == true {
+				os.Remove(f.Name())
+			}
+		}
 	}
 	return nil
 }
@@ -161,7 +196,7 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 		var fileName string
 		fileName, _, _ = CheckTaskList(m.taskList, args.taskId)
 		m.taskList = UpdateTaskList(m.taskList, args.taskId)
-		m.inputFiles = append(m.inputFiles, fileName)
+		m.fileList = append(m.fileList, fileName)
 		// reply.taskMode = "wait"
 	} else if msg == "done" {
 		m.taskList = UpdateTaskList(m.taskList, args.taskId)
@@ -184,9 +219,9 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
-
 	// Your code here.
-	m.inputFiles = files
+	m.fileList = files
+	m.nReduce = nReduce
 	m.workerNum = 0
 	m.taskId = 0
 	m.mapDone = false
