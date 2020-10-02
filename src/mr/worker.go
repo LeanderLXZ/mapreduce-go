@@ -42,109 +42,126 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	// Your worker implementation here.
 
-	// TODO: register workers for map
+	// Register workers for map
 	nReduce, workerID := Register()
 
-	// TODO: Request map task
-	fileName, taskMode, taskID := Request(workerID)
+	for {
+		// Request map task
+		fileName, taskMode, taskID := Request(workerID)
 
-	if taskMode == "map" {
-		// Map
-		intermediate := []KeyValue{}
-		file, err := os.Open(fileName)
-		if err != nil {
-			Report(workerID, taskID, taskMode, "failed")
-		}
-		content, err := ioutil.ReadAll(file)
-		if err != nil {
-			log.Fatalf("cannot read %v", fileName)
-		}
-		file.Close()
-		kva := mapf(fileName, string(content))
-		intermediate = append(intermediate, kva...)
+		if taskMode == "wait" {
+			// No task assigned, waiting for master
+			time.Sleep(time.Second)
+		} else if taskMode == "done" {
+			// All task done, exit worker
+			log.Fatal("All task done, worker exited.")
+			break
+		} else if taskMode == "map" {
+			// Map
+			// Report to master that the work has started
+			Report(workerID, taskID, taskMode, "working")
 
-		// Split keys to nReduce files
-		imFiles := make([][]KeyValue, nReduce)
-		for i := 0; i < len(intermediate); i++ {
-			kv := intermediate[i]
-			r := ihash(kv.Key) % nReduce
-			imFiles[r] = append(imFiles[r], kv)
-		}
-
-		// Generate intermediate files for nReduce workers
-		for i := 0; i < nReduce; i++ {
-			imFileName := fmt.Sprintf("mr-%v-%v", taskID, i)
-			imFile, _ := os.Create(imFileName)
-			enc := json.NewEncoder(imFile)
-			for _, kv := range imFiles[i] {
-				err := enc.Encode(&kv)
-			}
-			imFile.Close()
-		}
-	} else if taskMode == "reduce" {
-		// Get intermediate key value pairs from file
-		intermediate := []KeyValue{}
-		file, err := os.Open(fileName)
-		if err != nil {
-			log.Fatalf("cannot open %v", fileName)
-		}
-		dec := json.NewDecoder(file)
-		for {
-			var kv KeyValue
-			if err := dec.Decode(&kv); err != nil {
+			intermediate := []KeyValue{}
+			file, err := os.Open(fileName)
+			if err != nil {
+				Report(workerID, taskID, taskMode, "failed")
 				break
 			}
-			intermediate = append(intermediate, kv)
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				Report(workerID, taskID, taskMode, "failed")
+				file.Close()
+				break
+			}
+			file.Close()
+			kva := mapf(fileName, string(content))
+			intermediate = append(intermediate, kva...)
+
+			// Split keys to nReduce files
+			imFiles := make([][]KeyValue, nReduce)
+			for i := 0; i < len(intermediate); i++ {
+				kv := intermediate[i]
+				r := ihash(kv.Key) % nReduce
+				imFiles[r] = append(imFiles[r], kv)
+			}
+
+			// Generate intermediate files for nReduce workers
+			for i := 0; i < nReduce; i++ {
+				imFileName := fmt.Sprintf("mr-%v-%v", taskID, i)
+				imFile, _ := os.Create(imFileName)
+				enc := json.NewEncoder(imFile)
+				for _, kv := range imFiles[i] {
+					enc.Encode(&kv)
+				}
+				imFile.Close()
+			}
+			// Report to master that the work has finished
+			Report(workerID, taskID, taskMode, "done")
+		} else if taskMode == "reduce" {
+			//Reduce
+			// Report to master that the work has started
+			Report(workerID, taskID, taskMode, "working")
+
+			// Get intermediate key value pairs from file
+			intermediate := []KeyValue{}
+			file, err := os.Open(fileName)
+			if err != nil {
+				Report(workerID, taskID, taskMode, "failed")
+				break
+			}
+			dec := json.NewDecoder(file)
+			for {
+				var kv KeyValue
+				if err := dec.Decode(&kv); err != nil {
+					break
+				}
+				intermediate = append(intermediate, kv)
+			}
+
+			// Sort intermediate keys
+			sort.Sort(ByKey(intermediate))
+
+			// Reduce
+			outputName := fmt.Sprintf("mr-out-%v", taskID)
+			outputFile, _ := os.Create(outputName)
+			i := 0
+			for i < len(intermediate) {
+				j := i + 1
+				for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+					j++
+				}
+				values := []string{}
+				for k := i; k < j; k++ {
+					values = append(values, intermediate[k].Value)
+				}
+				output := reducef(intermediate[i].Key, values)
+
+				// Out the reduced files
+				fmt.Fprintf(outputFile, "%v %v\n", intermediate[i].Key, output)
+
+				i = j
+			}
+			// Report to master that the work has finished
+			Report(workerID, taskID, taskMode, "done")
+		} else {
+			// Wrong mode, work failed
+			Report(workerID, taskID, taskMode, "failed")
 		}
 
-		// Sort intermediate keys
-		sort.Sort(ByKey(intermediate))
-
-		// Reduce
-		outputName := fmt.Sprintf("mr-out-%v", taskID)
-		outputFile, _ := os.Create(outputName)
-		i := 0
-		for i < len(intermediate) {
-			j := i + 1
-			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
-				j++
-			}
-			values := []string{}
-			for k := i; k < j; k++ {
-				values = append(values, intermediate[k].Value)
-			}
-			output := reducef(intermediate[i].Key, values)
-
-			// this is the correct format for each line of Reduce output.
-			fmt.Fprintf(outputFile, "%v %v\n", intermediate[i].Key, output)
-
-			i = j
-		}
-
-	} else {
-		log.Fatalf("Wrong mode for worker")
+		// uncomment to send the Example RPC to the master.
+		// CallExample()
 	}
-
-	// uncomment to send the Example RPC to the master.
-	// CallExample()
-
 }
 
 func Register() (int, int) {
 	args := RegisterWorkerArgs{}
 	reply := RegisterWorkerReply{}
-
-	// send the RPC request, wait for the reply.
 	for call("Master.RegisterWorker", &args, &reply) == false {
 		time.Sleep(time.Second)
 	}
-
-	// workerID := reply.workerID
-	DPrintf("Got workerID %v\n", reply.workerID)
-	// DPrintf("Got a list of files %v\n", reply.InputFiles)
-
 	nReduce := reply.nReduce
 	workerID := reply.workerID
+	// DPrintf("Got workerID %v\n", workerID)
 	return nReduce, workerID
 }
 

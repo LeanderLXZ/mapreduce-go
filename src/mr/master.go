@@ -18,6 +18,7 @@ type Master struct {
 
 	workerNum int
 	taskId    int
+	allDone   bool
 
 	RWMutex  sync.Mutex
 	RQTMutex sync.Mutex
@@ -55,14 +56,12 @@ func (m *Master) server() {
 // if the entire job has finished.
 //
 func (m *Master) Done() bool {
-	ret := false
 
 	// Your code here.
-
-	return ret
+	return m.allDone
 }
 
-func (m *Master) DoneMap() bool {
+func (m *Master) doneMap() bool {
 	ret := false
 
 	// Your code here.
@@ -88,26 +87,29 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 //RequestTask is an RPC method that is called by workers to request a map or reduce task
 func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	m.RQTMutex.Lock()
-	f := m.DoneMap()
-	if f == false { //map task
-		if len(m.inputFiles) != 0 {
-			m.taskId++
-			time := time.Now().Unix()
-			task := Task{m.taskId, m.inputFiles[0], args.workerID, time}
+	if m.allDone == false {
+		if m.doneMap() == false { //map task
+			if len(m.inputFiles) != 0 {
+				m.taskId++
+				time := time.Now().Unix()
+				task := Task{m.taskId, m.inputFiles[0], args.workerID, time}
 
-			reply.fileName = task.files
-			reply.taskMode = "map"
-			reply.taskID = task.taskId
+				reply.fileName = task.files
+				reply.taskMode = "map"
+				reply.taskID = task.taskId
 
-			m.inputFiles = m.inputFiles[1:]
-			//workerlist update, do I need workerlist?
-			m.taskList = append(m.taskList, task)
-		} else {
-			// tell worker wait new task
-			reply.taskMode = "wait"
+				m.inputFiles = m.inputFiles[1:]
+				//workerlist update, do I need workerlist?
+				m.taskList = append(m.taskList, task)
+			} else {
+				// tell worker wait new task
+				reply.taskMode = "wait"
+			}
+		} else { //reduce task
+
 		}
-	} else { //reduce task
-
+	} else { // Alldone
+		reply.taskMode = "done"
 	}
 
 	m.RQTMutex.Unlock()
@@ -151,7 +153,7 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 		m.taskList = UpdateTaskList(m.taskList, args.taskID)
 		m.inputFiles = append(m.inputFiles, fileName)
 		reply.taskMode = "wait"
-	} else if msg == "finished" {
+	} else if msg == "done" {
 		m.taskList = UpdateTaskList(m.taskList, args.taskID)
 		reply.taskMode = "wait"
 	} else if msg == "working" {
@@ -176,6 +178,7 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.inputFiles = files
 	m.workerNum = 0
 	m.taskId = 0
+	m.allDone = false
 
 	go m.server()
 
