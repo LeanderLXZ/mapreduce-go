@@ -69,9 +69,9 @@ func (m *Master) Done() bool {
 // up to report that they are ready to receive tasks.
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
 	m.RWMutex.Lock()
-	m.WorkerNum++
 	reply.WorkerID = m.WorkerNum
 	reply.NReduce = m.NReduce
+	m.WorkerNum++
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
@@ -83,7 +83,6 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 	if m.AllDone == false {
 		if m.MapDone == false { //map task
 			if len(m.FileList) != 0 {
-				m.TaskID++
 				time := time.Now().Unix()
 				task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
 
@@ -94,6 +93,7 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 				m.FileList = m.FileList[1:]
 				//workerlist update, do I need workerlist?
 				m.TaskList = append(m.TaskList, task)
+				m.TaskID++
 			} else {
 				// tell worker to wait new task
 				reply.TaskMode = "wait"
@@ -174,9 +174,11 @@ func (m *Master) ClearIntermediate() error {
 	for r := 0; r < m.NReduce; r++ {
 		files, _ := ioutil.ReadDir("./")
 		for _, f := range files {
-			pattern := fmt.Sprintf("mr-\\d*-%v", r)
-			matched, _ := regexp.MatchString(pattern, f.Name())
-			if matched == true {
+			patternIM := fmt.Sprintf("mr-\\d*-%v", r)
+			matchedIM, _ := regexp.MatchString(patternIM, f.Name())
+			patternOUT := fmt.Sprintf("mr-out-\\d*")
+			matchedOUT, _ := regexp.MatchString(patternOUT, f.Name())
+			if matchedIM == true || matchedOUT == true {
 				os.Remove(f.Name())
 			}
 		}
@@ -222,6 +224,8 @@ func MakeMaster(files []string, NReduce int) *Master {
 	m.TaskID = 0
 	m.MapDone = false
 	m.AllDone = false
+
+	m.ClearIntermediate()
 
 	go m.server()
 

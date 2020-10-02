@@ -46,7 +46,7 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Register workers for map
 	nReduce, workerID := Register()
 
-	DPrintf("1.Registered")
+	DPrintf("Registered\n")
 
 	for {
 		// Request map task
@@ -54,16 +54,18 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		if taskMode == "wait" {
 			// No task assigned, waiting for master
+			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 			time.Sleep(time.Second)
 		} else if taskMode == "done" {
 			// All task done, exit worker
+			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 			log.Fatal("All task done, worker exited.")
 			break
 		} else if taskMode == "map" {
 			// Map
 			// Report to master that the work has started
 			Report(workerID, taskID, taskMode, "working")
-			DPrintf("2.Map")
+			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 
 			intermediate := []KeyValue{}
 			file, err := os.Open(fileName)
@@ -105,29 +107,33 @@ func Worker(mapf func(string, string) []KeyValue,
 			//Reduce
 			// Report to master that the work has started
 			Report(workerID, taskID, taskMode, "working")
+			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 
 			intermediate := []KeyValue{}
 			files := strings.Split(fileName, " ")
 			reduceFailed := false
 			for _, f := range files {
-				// Get intermediate key value pairs from file
-				file, err := os.Open(f)
-				if err != nil {
-					reduceFailed = true
-					break
-				}
-				dec := json.NewDecoder(file)
-				for {
-					var kv KeyValue
-					if err := dec.Decode(&kv); err != nil {
+				if f != "" {
+					// Get intermediate key value pairs from file
+					file, err := os.Open(f)
+					if err != nil {
+						DPrintf("Reduce open failed %v\n", f)
 						reduceFailed = true
 						break
 					}
-					intermediate = append(intermediate, kv)
+					dec := json.NewDecoder(file)
+					for {
+						var kv KeyValue
+						if err := dec.Decode(&kv); err != nil {
+							break
+						}
+						intermediate = append(intermediate, kv)
+					}
 				}
 			}
 			if reduceFailed == true {
 				Report(workerID, taskID, taskMode, "failed")
+				DPrintf("Reduce failed %v %v %v\n", workerID, taskID, taskMode)
 				break
 			}
 
@@ -159,6 +165,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		} else {
 			// Wrong mode, work failed
 			Report(workerID, taskID, taskMode, "failed")
+			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 		}
 
 		// uncomment to send the Example RPC to the master.
