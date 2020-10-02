@@ -94,7 +94,21 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 				reply.taskMode = "wait"
 			}
 		} else { //reduce task
+			if len(m.inputFiles) != 0 {
+				m.taskId++
+				time := time.Now().Unix()
+				task := Task{m.taskId, m.inputFiles[0], args.workerID, time}
 
+				reply.fileName = task.files
+				reply.taskMode = "reduce"
+				reply.taskID = task.taskId
+
+				m.inputFiles = m.inputFiles[1:]
+				m.taskList = append(m.taskList, task)
+			} else {
+				// tell worker wait new task
+				reply.taskMode = "wait"
+			}
 		}
 	} else { // Alldone
 		reply.taskMode = "done"
@@ -128,6 +142,14 @@ func CheckTaskList(taskList []Task, taskId int) (string, int, int64) {
 	return fileName, workerId, time
 }
 
+func (m *Master) UpdateTaskMode() error {
+	if len(m.inputFiles) == 0 && len(m.taskList) == 0 {
+		m.mapDone = true
+
+	}
+	return nil
+}
+
 //ReportTask is an RPC method that is called by workers to report a task's status
 //whenever a task is finished or failed
 //HINT: when a task is failed, master should reschedule it.
@@ -140,16 +162,17 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 		fileName, _, _ = CheckTaskList(m.taskList, args.taskID)
 		m.taskList = UpdateTaskList(m.taskList, args.taskID)
 		m.inputFiles = append(m.inputFiles, fileName)
-		reply.taskMode = "wait"
+		// reply.taskMode = "wait"
 	} else if msg == "done" {
 		m.taskList = UpdateTaskList(m.taskList, args.taskID)
-		reply.taskMode = "wait"
+		m.UpdateTaskMode()
+		// reply.taskMode = "wait"
 	} else if msg == "working" {
 		time1 := time.Now().Unix()
 		_, _, time0 := CheckTaskList(m.taskList, args.taskID)
 		if time0-time1 > 10 {
 			m.taskList = UpdateTaskList(m.taskList, args.taskID)
-			reply.taskMode = "wait"
+			// reply.taskMode = "wait"
 		}
 	}
 	m.RPTMutex.Unlock()
