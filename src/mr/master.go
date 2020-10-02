@@ -16,9 +16,9 @@ import (
 
 type Master struct {
 	// Your definitions here.
-	FileList   []string //rest files list
-	TaskList   []Task   //working files--WorkerID list
-	WorkerList []int
+	FileList    []string       //rest files list
+	TaskList    map[int]string // takes status list
+	WorkingList map[int]Task   // working files--WorkerID list
 
 	NReduce   int
 	WorkerNum int
@@ -73,7 +73,6 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 	reply.NReduce = m.NReduce
 	m.WorkerNum++
 	m.RWMutex.Unlock()
-	// DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
 }
 
@@ -82,8 +81,8 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 	m.RQTMutex.Lock()
 	if m.AllDone == false {
 		if len(m.FileList) != 0 {
-			task := Task{m.TaskID, m.FileList[0], args.WorkerID, "working"}
-			reply.FileName = task.Files
+			task := Task{m.TaskID, m.FileList[0], args.WorkerID}
+			reply.FileName = task.FileName
 			reply.TaskID = task.TaskID
 			if m.MapDone == false { //map task
 				reply.TaskMode = "map"
@@ -91,11 +90,12 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 				reply.TaskMode = "reduce"
 			}
 			m.FileList = m.FileList[1:]
-			m.TaskList = append(m.TaskList, task)
+			m.WorkingList[task.TaskID] = task
+			m.TaskList[task.TaskID] = ""
 			m.TaskID++
 
 			// Run a ticker for task
-			go m.taskTicker(task)
+			go m.taskTicker(task.TaskID)
 		} else {
 			// tell worker to wait new task
 			reply.TaskMode = "wait"
@@ -114,12 +114,12 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 	m.RPTMutex.Lock()
 	if args.Msg == "failed" {
 		m.resetTask(args.TaskID)
-		m.setTaskStatus(args.TaskID, "failed")
+		m.TaskList[args.TaskID] = "failed"
 	} else if args.Msg == "done" {
+		m.TaskList[args.TaskID] = "done"
 		m.finishTask(args.TaskID, args.TaskMode)
-		m.setTaskStatus(args.TaskID, "done")
 	} else if args.Msg == "working" {
-		m.setTaskStatus(args.TaskID, "working")
+		m.TaskList[args.TaskID] = "working"
 	}
 	m.RPTMutex.Unlock()
 	return nil
@@ -132,6 +132,8 @@ func MakeMaster(files []string, NReduce int) *Master {
 	m := Master{}
 	// Your code here.
 	m.FileList = files
+	m.TaskList = make(map[int]string)
+	m.WorkingList = make(map[int]Task)
 	m.NReduce = NReduce
 	m.WorkerNum = 0
 	m.TaskID = 0
@@ -142,16 +144,20 @@ func MakeMaster(files []string, NReduce int) *Master {
 	return &m
 }
 
-func (m *Master) taskTicker(task Task) {
+func (m *Master) taskTicker(taskID int) {
 	ticker := time.NewTicker(10 * time.Second)
 	for {
+		// Get rid of read and write a same map
+		time.Sleep(time.Second)
 		select {
 		case <-ticker.C:
 			m.RQTMutex.Lock()
-			m.resetTask(task.TaskID)
+			m.resetTask(taskID)
 			m.RQTMutex.Unlock()
+			return
 		default:
-			if task.Status == "done" || task.Status == "failed" {
+			taskStatus := m.TaskList[taskID]
+			if taskStatus == "done" || taskStatus == "failed" {
 				return
 			}
 		}
@@ -159,7 +165,7 @@ func (m *Master) taskTicker(task Task) {
 }
 
 func (m *Master) updateTaskMode(taskMode string) error {
-	if len(m.FileList) == 0 && len(m.TaskList) == 0 {
+	if len(m.FileList) == 0 && len(m.WorkingList) == 0 {
 		if taskMode == "map" {
 			m.MapDone = true
 			files, _ := ioutil.ReadDir("./")
@@ -185,38 +191,16 @@ func (m *Master) updateTaskMode(taskMode string) error {
 	return nil
 }
 
-func (m *Master) popTaskList(taskID int) {
-	for i := 0; i < len(m.TaskList); i++ { //update TaskList
-		if m.TaskList[i].TaskID == taskID {
-			m.TaskList = append(m.TaskList[:i], m.TaskList[i+1:]...)
-		}
-	}
-}
-
 func (m *Master) resetTask(taskID int) error {
-	m.popTaskList(taskID)
-	var fileName string
-	for i := 0; i < len(m.TaskList); i++ { //update TaskList
-		if m.TaskList[i].TaskID == taskID {
-			fileName = m.TaskList[i].Files
-		}
-	}
+	fileName := m.WorkingList[taskID].FileName
 	m.FileList = append(m.FileList, fileName)
+	delete(m.WorkingList, taskID)
 	return nil
 }
 
 func (m *Master) finishTask(taskID int, taskMode string) error {
-	m.popTaskList(taskID)
+	delete(m.WorkingList, taskID)
 	m.updateTaskMode(taskMode)
-	return nil
-}
-
-func (m *Master) setTaskStatus(taskID int, status string) error {
-	for i := 0; i < len(m.TaskList); i++ { //update TaskList
-		if m.TaskList[i].TaskID == taskID {
-			m.TaskList[i].Status = status
-		}
-	}
 	return nil
 }
 
