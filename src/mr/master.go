@@ -1,6 +1,7 @@
 package mr
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -16,6 +17,7 @@ type Master struct {
 	taskList   []Task   //working files--workerId list
 	workerList []int
 
+	nReduce   int
 	workerNum int
 	taskId    int
 	mapDone   bool
@@ -66,6 +68,7 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 	m.RWMutex.Lock()
 	m.workerNum++
 	reply.workerID = m.workerNum
+	reply.nReduce = m.nReduce
 	// reply.InputFiles = m.inputFiles
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)
@@ -90,7 +93,7 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 				//workerlist update, do I need workerlist?
 				m.taskList = append(m.taskList, task)
 			} else {
-				// tell worker wait new task
+				// tell worker to wait new task
 				reply.taskMode = "wait"
 			}
 		} else { //reduce task
@@ -145,6 +148,11 @@ func CheckTaskList(taskList []Task, taskId int) (string, int, int64) {
 func (m *Master) UpdateTaskMode() error {
 	if len(m.inputFiles) == 0 && len(m.taskList) == 0 {
 		m.mapDone = true
+		interfiles := os.Args[1:]
+		if len(interfiles) < 2 {
+			fmt.Fprintf(os.Stderr, "Usage: intermediate inputfiles...\n")
+			os.Exit(1)
+		}
 
 	}
 	return nil
@@ -184,9 +192,9 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 //
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
-
 	// Your code here.
 	m.inputFiles = files
+	m.nReduce = nReduce
 	m.workerNum = 0
 	m.taskId = 0
 	m.mapDone = false
