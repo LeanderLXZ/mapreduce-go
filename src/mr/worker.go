@@ -45,12 +45,12 @@ func Worker(mapf func(string, string) []KeyValue,
 
 	// Register workers for map
 	nReduce, workerID := Register()
-
 	DPrintf("Registered\n")
 
 	for {
 		// Request map task
 		fileName, taskMode, taskID := Request(workerID)
+		// time.Sleep(time.Second)
 
 		if taskMode == "wait" {
 			// No task assigned, waiting for master
@@ -60,7 +60,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			// All task done, exit worker
 			DPrintf("%v %v %v\n", taskMode, workerID, taskID)
 			log.Fatal("All task done, worker exited.")
-			break
+			os.Exit(1)
 		} else if taskMode == "map" {
 			// Map
 			// Report to master that the work has started

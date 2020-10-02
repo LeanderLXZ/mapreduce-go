@@ -81,43 +81,29 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	m.RQTMutex.Lock()
 	if m.AllDone == false {
-		if m.MapDone == false { //map task
-			if len(m.FileList) != 0 {
-				time := time.Now().Unix()
-				task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
 
-				reply.FileName = task.Files
+		if len(m.FileList) != 0 {
+			time := time.Now().Unix()
+			task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
+
+			reply.FileName = task.Files
+			if m.MapDone == false { //map task
 				reply.TaskMode = "map"
-				reply.TaskID = task.TaskID
-
-				m.FileList = m.FileList[1:]
-				//workerlist update, do I need workerlist?
-				m.TaskList = append(m.TaskList, task)
-				m.TaskID++
 			} else {
-				// tell worker to wait new task
-				reply.TaskMode = "wait"
-			}
-		} else { //reduce task
-			if len(m.FileList) != 0 {
-				m.TaskID++
-				time := time.Now().Unix()
-				task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
-
-				reply.FileName = task.Files
 				reply.TaskMode = "reduce"
-				reply.TaskID = task.TaskID
-
-				m.FileList = m.FileList[1:]
-				m.TaskList = append(m.TaskList, task)
-			} else {
-				// tell worker wait new task
-				reply.TaskMode = "wait"
 			}
+			reply.TaskID = task.TaskID
+
+			m.FileList = m.FileList[1:]
+			//workerlist update, do I need workerlist?
+			m.TaskList = append(m.TaskList, task)
+			m.TaskID++
+		} else {
+			// tell worker to wait new task
+			reply.TaskMode = "wait"
 		}
 	} else { // AllDone
 		reply.TaskMode = "done"
-		m.ClearIntermediate()
 	}
 
 	m.RQTMutex.Unlock()
@@ -148,30 +134,36 @@ func CheckTaskList(TaskList []Task, TaskID int) (string, int, int64) {
 	return FileName, WorkerID, time
 }
 
-func (m *Master) UpdateTaskMode() error {
+func UpdateTaskMode(m *Master, taskMode string) error {
 	if len(m.FileList) == 0 && len(m.TaskList) == 0 {
-		m.MapDone = true
-		files, _ := ioutil.ReadDir("./")
+		if taskMode == "map" {
+			m.MapDone = true
+			files, _ := ioutil.ReadDir("./")
 
-		// Update the filelist to reduce files
-		rFileList := make([]string, m.NReduce)
-		for r := 0; r < m.NReduce; r++ {
-			for _, f := range files {
-				pattern := fmt.Sprintf("mr-\\d*-%v", r)
-				matched, _ := regexp.MatchString(pattern, f.Name())
-				if matched == true {
-					rFileList[r] = strings.Join([]string{rFileList[r], f.Name()}, " ")
+			// Update the filelist to reduce files
+			rFileList := make([]string, m.NReduce)
+			for r := 0; r < m.NReduce; r++ {
+				for _, f := range files {
+					pattern := fmt.Sprintf("mr-\\d*-%v", r)
+					matched, _ := regexp.MatchString(pattern, f.Name())
+					if matched == true {
+						rFileList[r] = strings.Join([]string{rFileList[r], f.Name()}, " ")
+					}
 				}
 			}
+			m.FileList = rFileList
+			m.TaskID = 0
+		} else if taskMode == "reduce" {
+			m.AllDone = true
+			ClearIntermediate(m.NReduce)
 		}
-		m.FileList = rFileList
 	}
 	return nil
 }
 
-func (m *Master) ClearIntermediate() error {
+func Clear(nReduce int) error {
 	// Update the filelist to reduce files
-	for r := 0; r < m.NReduce; r++ {
+	for r := 0; r < nReduce; r++ {
 		files, _ := ioutil.ReadDir("./")
 		for _, f := range files {
 			patternIM := fmt.Sprintf("mr-\\d*-%v", r)
@@ -179,6 +171,21 @@ func (m *Master) ClearIntermediate() error {
 			patternOUT := fmt.Sprintf("mr-out-\\d*")
 			matchedOUT, _ := regexp.MatchString(patternOUT, f.Name())
 			if matchedIM == true || matchedOUT == true {
+				os.Remove(f.Name())
+			}
+		}
+	}
+	return nil
+}
+
+func ClearIntermediate(nNReduce int) error {
+	// Update the filelist to reduce files
+	for r := 0; r < nNReduce; r++ {
+		files, _ := ioutil.ReadDir("./")
+		for _, f := range files {
+			patternIM := fmt.Sprintf("mr-\\d*-%v", r)
+			matchedIM, _ := regexp.MatchString(patternIM, f.Name())
+			if matchedIM == true {
 				os.Remove(f.Name())
 			}
 		}
@@ -200,7 +207,7 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 		m.FileList = append(m.FileList, FileName)
 	} else if msg == "done" {
 		m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
-		m.UpdateTaskMode()
+		UpdateTaskMode(m, args.TaskMode)
 	} else if msg == "working" {
 		time1 := time.Now().Unix()
 		_, _, time0 := CheckTaskList(m.TaskList, args.TaskID)
@@ -225,7 +232,7 @@ func MakeMaster(files []string, NReduce int) *Master {
 	m.MapDone = false
 	m.AllDone = false
 
-	m.ClearIntermediate()
+	Clear(m.NReduce)
 
 	go m.server()
 
