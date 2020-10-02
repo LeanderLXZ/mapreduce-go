@@ -22,23 +22,22 @@ type RegisterWorkerArgs struct {
 
 type RegisterWorkerReply struct {
 	nReduce  int
-	workerID int
-	// InputFiles []string
+	workerId int
 }
 
 type RequestTaskArgs struct {
-	workerID int
+	workerId int
 }
 
 type RequestTaskReply struct {
 	fileName string
 	taskMode string
-	taskID   int
+	taskId   int
 }
 
 type ReportTaskArgs struct {
-	workerID int
-	taskID   int
+	workerId int
+	taskId   int
 	taskMode string
 	msg      string
 }

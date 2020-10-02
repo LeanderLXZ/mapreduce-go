@@ -65,7 +65,7 @@ func (m *Master) Done() bool {
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
 	m.RWMutex.Lock()
 	m.workerNum++
-	reply.workerID = m.workerNum
+	reply.workerId = m.workerNum
 	// reply.InputFiles = m.inputFiles
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)
@@ -80,11 +80,11 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 			if len(m.inputFiles) != 0 {
 				m.taskId++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.inputFiles[0], args.workerID, time}
+				task := Task{m.taskId, m.inputFiles[0], args.workerId, time}
 
 				reply.fileName = task.files
 				reply.taskMode = "map"
-				reply.taskID = task.taskId
+				reply.taskId = task.taskId
 
 				m.inputFiles = m.inputFiles[1:]
 				//workerlist update, do I need workerlist?
@@ -97,11 +97,11 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 			if len(m.inputFiles) != 0 {
 				m.taskId++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.inputFiles[0], args.workerID, time}
+				task := Task{m.taskId, m.inputFiles[0], args.workerId, time}
 
 				reply.fileName = task.files
 				reply.taskMode = "reduce"
-				reply.taskID = task.taskId
+				reply.taskId = task.taskId
 
 				m.inputFiles = m.inputFiles[1:]
 				m.taskList = append(m.taskList, task)
@@ -159,19 +159,19 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 
 	if msg == "failed" {
 		var fileName string
-		fileName, _, _ = CheckTaskList(m.taskList, args.taskID)
-		m.taskList = UpdateTaskList(m.taskList, args.taskID)
+		fileName, _, _ = CheckTaskList(m.taskList, args.taskId)
+		m.taskList = UpdateTaskList(m.taskList, args.taskId)
 		m.inputFiles = append(m.inputFiles, fileName)
 		// reply.taskMode = "wait"
 	} else if msg == "done" {
-		m.taskList = UpdateTaskList(m.taskList, args.taskID)
+		m.taskList = UpdateTaskList(m.taskList, args.taskId)
 		m.UpdateTaskMode()
 		// reply.taskMode = "wait"
 	} else if msg == "working" {
 		time1 := time.Now().Unix()
-		_, _, time0 := CheckTaskList(m.taskList, args.taskID)
+		_, _, time0 := CheckTaskList(m.taskList, args.taskId)
 		if time0-time1 > 10 {
-			m.taskList = UpdateTaskList(m.taskList, args.taskID)
+			m.taskList = UpdateTaskList(m.taskList, args.taskId)
 			// reply.taskMode = "wait"
 		}
 	}

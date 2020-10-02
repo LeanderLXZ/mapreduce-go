@@ -44,11 +44,11 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Your worker implementation here.
 
 	// Register workers for map
-	nReduce, workerID := Register()
+	nReduce, workerId := Register()
 
 	for {
 		// Request map task
-		fileName, taskMode, taskID := Request(workerID)
+		fileName, taskMode, taskId := Request(workerId)
 
 		if taskMode == "wait" {
 			// No task assigned, waiting for master
@@ -60,17 +60,17 @@ func Worker(mapf func(string, string) []KeyValue,
 		} else if taskMode == "map" {
 			// Map
 			// Report to master that the work has started
-			Report(workerID, taskID, taskMode, "working")
+			Report(workerId, taskId, taskMode, "working")
 
 			intermediate := []KeyValue{}
 			file, err := os.Open(fileName)
 			if err != nil {
-				Report(workerID, taskID, taskMode, "failed")
+				Report(workerId, taskId, taskMode, "failed")
 				break
 			}
 			content, err := ioutil.ReadAll(file)
 			if err != nil {
-				Report(workerID, taskID, taskMode, "failed")
+				Report(workerId, taskId, taskMode, "failed")
 				file.Close()
 				break
 			}
@@ -88,7 +88,7 @@ func Worker(mapf func(string, string) []KeyValue,
 
 			// Generate intermediate files for nReduce workers
 			for i := 0; i < nReduce; i++ {
-				imFileName := fmt.Sprintf("mr-%v-%v", taskID, i)
+				imFileName := fmt.Sprintf("mr-%v-%v", taskId, i)
 				imFile, _ := os.Create(imFileName)
 				enc := json.NewEncoder(imFile)
 				for _, kv := range imFiles[i] {
@@ -97,36 +97,42 @@ func Worker(mapf func(string, string) []KeyValue,
 				imFile.Close()
 			}
 			// Report to master that the work has finished
-			Report(workerID, taskID, taskMode, "done")
+			Report(workerId, taskId, taskMode, "done")
 		} else if taskMode == "reduce" {
 			//Reduce
 			// Report to master that the work has started
-			Report(workerID, taskID, taskMode, "working")
+			Report(workerId, taskId, taskMode, "working")
 
 			intermediate := []KeyValue{}
 			files := strings.Split(fileName, " ")
+			reduceFailed := false
 			for _, f := range files {
 				// Get intermediate key value pairs from file
 				file, err := os.Open(f)
 				if err != nil {
-					Report(workerID, taskID, taskMode, "failed")
+					reduceFailed = true
 					break
 				}
 				dec := json.NewDecoder(file)
 				for {
 					var kv KeyValue
 					if err := dec.Decode(&kv); err != nil {
+						reduceFailed = true
 						break
 					}
 					intermediate = append(intermediate, kv)
 				}
+			}
+			if reduceFailed == true {
+				Report(workerId, taskId, taskMode, "failed")
+				break
 			}
 
 			// Sort intermediate keys
 			sort.Sort(ByKey(intermediate))
 
 			// Reduce
-			outputName := fmt.Sprintf("mr-out-%v", taskID)
+			outputName := fmt.Sprintf("mr-out-%v", taskId)
 			outputFile, _ := os.Create(outputName)
 			i := 0
 			for i < len(intermediate) {
@@ -146,10 +152,10 @@ func Worker(mapf func(string, string) []KeyValue,
 				i = j
 			}
 			// Report to master that the work has finished
-			Report(workerID, taskID, taskMode, "done")
+			Report(workerId, taskId, taskMode, "done")
 		} else {
 			// Wrong mode, work failed
-			Report(workerID, taskID, taskMode, "failed")
+			Report(workerId, taskId, taskMode, "failed")
 		}
 
 		// uncomment to send the Example RPC to the master.
@@ -164,14 +170,14 @@ func Register() (int, int) {
 		time.Sleep(time.Second)
 	}
 	nReduce := reply.nReduce
-	workerID := reply.workerID
-	// DPrintf("Got workerID %v\n", workerID)
-	return nReduce, workerID
+	workerId := reply.workerId
+	// DPrintf("Got workerId %v\n", workerId)
+	return nReduce, workerId
 }
 
-func Request(workerID int) (string, string, int) {
+func Request(workerId int) (string, string, int) {
 	args := RequestTaskArgs{
-		workerID: workerID,
+		workerId: workerId,
 	}
 	reply := RequestTaskReply{}
 	for call("Master.RequestTask", &args, &reply) == false {
@@ -179,14 +185,14 @@ func Request(workerID int) (string, string, int) {
 	}
 	fileName := reply.fileName
 	taskMode := reply.taskMode
-	taskID := reply.taskID
-	return fileName, taskMode, taskID
+	taskId := reply.taskId
+	return fileName, taskMode, taskId
 }
 
-func Report(workerID int, taskID int, taskMode string, msg string) {
+func Report(workerId int, taskId int, taskMode string, msg string) {
 	args := ReportTaskArgs{
-		workerID: workerID,
-		taskID:   taskID,
+		workerId: workerId,
+		taskId:   taskId,
 		taskMode: taskMode,
 		msg:      msg,
 	}
