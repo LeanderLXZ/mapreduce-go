@@ -87,8 +87,9 @@ func mapTask(
 	nReduce int,
 	mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
-	intermediate := []KeyValue{}
+
 	file, err := os.Open(fileName)
+	intermediate := []KeyValue{}
 	if err != nil {
 		report(taskID, taskMode, "failed")
 		return
@@ -160,7 +161,9 @@ func reduceTask(
 
 	// Reduce
 	outputName := fmt.Sprintf("mr-out-%v", taskID)
-	outputfile, _ := os.Create(outputName)
+	tempName := fmt.Sprintf("mr-out-%v-temp", taskID)
+	tmpfile, _ := ioutil.TempFile("", tempName)
+	defer os.Rename(tmpfile.Name(), outputName)
 	i := 0
 	for i < len(intermediate) {
 		j := i + 1
@@ -174,7 +177,7 @@ func reduceTask(
 		output := reducef(intermediate[i].Key, values)
 
 		// Output the reduced files
-		fmt.Fprintf(outputfile, "%v %v\n", intermediate[i].Key, output)
+		fmt.Fprintf(tmpfile, "%v %v\n", intermediate[i].Key, output)
 
 		i = j
 	}

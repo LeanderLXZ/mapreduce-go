@@ -27,7 +27,7 @@ const (
 
 // Debugging enabled?
 // !!!!@TODO turn debugEnabled to false for grading
-const debugEnabled = true
+const debugEnabled = false
 
 // DPrintf() will only print if debugEnabled is true
 
