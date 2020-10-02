@@ -36,7 +36,6 @@ type RequestTaskReply struct {
 }
 
 type ReportTaskArgs struct {
-	WorkerID int
 	TaskID   int
 	TaskMode string
 	Msg      string

@@ -81,23 +81,21 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	m.RQTMutex.Lock()
 	if m.AllDone == false {
-
 		if len(m.FileList) != 0 {
-			time := time.Now().Unix()
-			task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
-
+			task := Task{m.TaskID, m.FileList[0], args.WorkerID, "working"}
 			reply.FileName = task.Files
+			reply.TaskID = task.TaskID
 			if m.MapDone == false { //map task
 				reply.TaskMode = "map"
 			} else {
 				reply.TaskMode = "reduce"
 			}
-			reply.TaskID = task.TaskID
-
 			m.FileList = m.FileList[1:]
-			//workerlist update, do I need workerlist?
 			m.TaskList = append(m.TaskList, task)
 			m.TaskID++
+
+			// Run a ticker for task
+			go m.taskTicker(task)
 		} else {
 			// tell worker to wait new task
 			reply.TaskMode = "wait"
@@ -105,36 +103,62 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 	} else { // AllDone
 		reply.TaskMode = "done"
 	}
-
 	m.RQTMutex.Unlock()
 	return nil
 }
 
-func UpdateTaskList(TaskList []Task, TaskID int) []Task {
-	for i := 0; i < len(TaskList); i++ { //update TaskList
-		if TaskList[i].TaskID == TaskID {
-			TaskList = append(TaskList[:i], TaskList[i+1:]...)
-		}
+//ReportTask is an RPC method that is called by workers to report a task's status
+//whenever a task is finished or failed
+//HINT: when a task is failed, master should reschedule it.
+func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
+	m.RPTMutex.Lock()
+	if args.Msg == "failed" {
+		m.resetTask(args.TaskID)
+		m.setTaskStatus(args.TaskID, "failed")
+	} else if args.Msg == "done" {
+		m.finishTask(args.TaskID, args.TaskMode)
+		m.setTaskStatus(args.TaskID, "done")
+	} else if args.Msg == "working" {
+		m.setTaskStatus(args.TaskID, "working")
 	}
-	return TaskList
+	m.RPTMutex.Unlock()
+	return nil
 }
 
-func CheckTaskList(TaskList []Task, TaskID int) (string, int, int64) {
-	var FileName string
-	var WorkerID int
-	var time int64
-
-	for i := 0; i < len(TaskList); i++ { //update TaskList
-		if TaskList[i].TaskID == TaskID {
-			FileName = TaskList[i].Files
-			WorkerID = TaskList[i].WorkerID
-			time = TaskList[i].Time
-		}
-	}
-	return FileName, WorkerID, time
+//
+// create a Master.
+//
+func MakeMaster(files []string, NReduce int) *Master {
+	m := Master{}
+	// Your code here.
+	m.FileList = files
+	m.NReduce = NReduce
+	m.WorkerNum = 0
+	m.TaskID = 0
+	m.MapDone = false
+	m.AllDone = false
+	clearAll(m.NReduce)
+	go m.server()
+	return &m
 }
 
-func UpdateTaskMode(m *Master, taskMode string) error {
+func (m *Master) taskTicker(task Task) {
+	ticker := time.NewTicker(10 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			m.RQTMutex.Lock()
+			m.resetTask(task.TaskID)
+			m.RQTMutex.Unlock()
+		default:
+			if task.Status == "done" || task.Status == "failed" {
+				return
+			}
+		}
+	}
+}
+
+func (m *Master) updateTaskMode(taskMode string) error {
 	if len(m.FileList) == 0 && len(m.TaskList) == 0 {
 		if taskMode == "map" {
 			m.MapDone = true
@@ -155,13 +179,48 @@ func UpdateTaskMode(m *Master, taskMode string) error {
 			m.TaskID = 0
 		} else if taskMode == "reduce" {
 			m.AllDone = true
-			ClearIntermediate(m.NReduce)
+			clearIntermediate(m.NReduce)
 		}
 	}
 	return nil
 }
 
-func Clear(nReduce int) error {
+func (m *Master) popTaskList(taskID int) {
+	for i := 0; i < len(m.TaskList); i++ { //update TaskList
+		if m.TaskList[i].TaskID == taskID {
+			m.TaskList = append(m.TaskList[:i], m.TaskList[i+1:]...)
+		}
+	}
+}
+
+func (m *Master) resetTask(taskID int) error {
+	m.popTaskList(taskID)
+	var fileName string
+	for i := 0; i < len(m.TaskList); i++ { //update TaskList
+		if m.TaskList[i].TaskID == taskID {
+			fileName = m.TaskList[i].Files
+		}
+	}
+	m.FileList = append(m.FileList, fileName)
+	return nil
+}
+
+func (m *Master) finishTask(taskID int, taskMode string) error {
+	m.popTaskList(taskID)
+	m.updateTaskMode(taskMode)
+	return nil
+}
+
+func (m *Master) setTaskStatus(taskID int, status string) error {
+	for i := 0; i < len(m.TaskList); i++ { //update TaskList
+		if m.TaskList[i].TaskID == taskID {
+			m.TaskList[i].Status = status
+		}
+	}
+	return nil
+}
+
+func clearAll(nReduce int) error {
 	// Update the filelist to reduce files
 	for r := 0; r < nReduce; r++ {
 		files, _ := ioutil.ReadDir("./")
@@ -178,7 +237,7 @@ func Clear(nReduce int) error {
 	return nil
 }
 
-func ClearIntermediate(nNReduce int) error {
+func clearIntermediate(nNReduce int) error {
 	// Update the filelist to reduce files
 	for r := 0; r < nNReduce; r++ {
 		files, _ := ioutil.ReadDir("./")
@@ -191,50 +250,4 @@ func ClearIntermediate(nNReduce int) error {
 		}
 	}
 	return nil
-}
-
-//ReportTask is an RPC method that is called by workers to report a task's status
-//whenever a task is finished or failed
-//HINT: when a task is failed, master should reschedule it.
-func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
-	m.RPTMutex.Lock()
-	msg := args.Msg
-
-	if msg == "failed" {
-		var FileName string
-		FileName, _, _ = CheckTaskList(m.TaskList, args.TaskID)
-		m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
-		m.FileList = append(m.FileList, FileName)
-	} else if msg == "done" {
-		m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
-		UpdateTaskMode(m, args.TaskMode)
-	} else if msg == "working" {
-		time1 := time.Now().Unix()
-		_, _, time0 := CheckTaskList(m.TaskList, args.TaskID)
-		if time0-time1 > 10 {
-			m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
-		}
-	}
-	m.RPTMutex.Unlock()
-	return nil
-}
-
-//
-// create a Master.
-//
-func MakeMaster(files []string, NReduce int) *Master {
-	m := Master{}
-	// Your code here.
-	m.FileList = files
-	m.NReduce = NReduce
-	m.WorkerNum = 0
-	m.TaskID = 0
-	m.MapDone = false
-	m.AllDone = false
-
-	Clear(m.NReduce)
-
-	go m.server()
-
-	return &m
 }
