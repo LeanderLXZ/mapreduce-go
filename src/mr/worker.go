@@ -9,6 +9,7 @@ import (
 	"net/rpc"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -102,20 +103,23 @@ func Worker(mapf func(string, string) []KeyValue,
 			// Report to master that the work has started
 			Report(workerID, taskID, taskMode, "working")
 
-			// Get intermediate key value pairs from file
 			intermediate := []KeyValue{}
-			file, err := os.Open(fileName)
-			if err != nil {
-				Report(workerID, taskID, taskMode, "failed")
-				break
-			}
-			dec := json.NewDecoder(file)
-			for {
-				var kv KeyValue
-				if err := dec.Decode(&kv); err != nil {
+			files := strings.Split(fileName, " ")
+			for _, f := range files {
+				// Get intermediate key value pairs from file
+				file, err := os.Open(f)
+				if err != nil {
+					Report(workerID, taskID, taskMode, "failed")
 					break
 				}
-				intermediate = append(intermediate, kv)
+				dec := json.NewDecoder(file)
+				for {
+					var kv KeyValue
+					if err := dec.Decode(&kv); err != nil {
+						break
+					}
+					intermediate = append(intermediate, kv)
+				}
 			}
 
 			// Sort intermediate keys
