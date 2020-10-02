@@ -8,11 +8,13 @@ package main
 // go run mrworker.go ../mrapps/wc.so
 //
 
-import "mr"
-import "plugin"
-import "os"
-import "fmt"
-import "log"
+import (
+	"fmt"
+	"log"
+	"mr"
+	"os"
+	"plugin"
+)
 
 func main() {
 	if len(os.Args) != 2 {
@@ -32,7 +34,7 @@ func main() {
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
 	p, err := plugin.Open(filename)
 	if err != nil {
-		log.Fatalf("cannot load plugin %v", filename)
+		log.Fatalf("cannot load plugin %v Error: %v", filename, err)
 	}
 	xmapf, err := p.Lookup("Map")
 	if err != nil {

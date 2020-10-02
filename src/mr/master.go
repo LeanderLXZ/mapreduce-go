@@ -16,15 +16,15 @@ import (
 
 type Master struct {
 	// Your definitions here.
-	fileList   []string //rest files list
-	taskList   []Task   //working files--workerId list
-	workerList []int
+	FileList   []string //rest files list
+	TaskList   []Task   //working files--WorkerID list
+	WorkerList []int
 
-	nReduce   int
-	workerNum int
-	taskId    int
-	mapDone   bool
-	allDone   bool
+	NReduce   int
+	WorkerNum int
+	TaskID    int
+	MapDone   bool
+	AllDone   bool
 
 	RWMutex  sync.Mutex
 	RQTMutex sync.Mutex
@@ -62,17 +62,16 @@ func (m *Master) server() {
 // if the entire job has finished.
 //
 func (m *Master) Done() bool {
-	return m.allDone
+	return m.AllDone
 }
 
 //RegisterWorker is an RPC method that is called by workers after they have started
 // up to report that they are ready to receive tasks.
 func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerReply) error {
 	m.RWMutex.Lock()
-	m.workerNum++
-	reply.workerId = m.workerNum
-	reply.nReduce = m.nReduce
-	// reply.InputFiles = m.fileList
+	m.WorkerNum++
+	reply.WorkerID = m.WorkerNum
+	reply.NReduce = m.NReduce
 	m.RWMutex.Unlock()
 	// DPrintf("Sending file list: %v\n", reply.InputFiles)
 	return nil
@@ -81,43 +80,43 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 //RequestTask is an RPC method that is called by workers to request a map or reduce task
 func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	m.RQTMutex.Lock()
-	if m.allDone == false {
-		if m.mapDone == false { //map task
-			if len(m.fileList) != 0 {
-				m.taskId++
+	if m.AllDone == false {
+		if m.MapDone == false { //map task
+			if len(m.FileList) != 0 {
+				m.TaskID++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.fileList[0], args.workerId, time}
+				task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
 
-				reply.fileName = task.files
-				reply.taskMode = "map"
-				reply.taskId = task.taskId
+				reply.FileName = task.Files
+				reply.TaskMode = "map"
+				reply.TaskID = task.TaskID
 
-				m.fileList = m.fileList[1:]
+				m.FileList = m.FileList[1:]
 				//workerlist update, do I need workerlist?
-				m.taskList = append(m.taskList, task)
+				m.TaskList = append(m.TaskList, task)
 			} else {
 				// tell worker to wait new task
-				reply.taskMode = "wait"
+				reply.TaskMode = "wait"
 			}
 		} else { //reduce task
-			if len(m.fileList) != 0 {
-				m.taskId++
+			if len(m.FileList) != 0 {
+				m.TaskID++
 				time := time.Now().Unix()
-				task := Task{m.taskId, m.fileList[0], args.workerId, time}
+				task := Task{m.TaskID, m.FileList[0], args.WorkerID, time}
 
-				reply.fileName = task.files
-				reply.taskMode = "reduce"
-				reply.taskId = task.taskId
+				reply.FileName = task.Files
+				reply.TaskMode = "reduce"
+				reply.TaskID = task.TaskID
 
-				m.fileList = m.fileList[1:]
-				m.taskList = append(m.taskList, task)
+				m.FileList = m.FileList[1:]
+				m.TaskList = append(m.TaskList, task)
 			} else {
 				// tell worker wait new task
-				reply.taskMode = "wait"
+				reply.TaskMode = "wait"
 			}
 		}
-	} else { // Alldone
-		reply.taskMode = "done"
+	} else { // AllDone
+		reply.TaskMode = "done"
 		m.ClearIntermediate()
 	}
 
@@ -125,38 +124,38 @@ func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) err
 	return nil
 }
 
-func UpdateTaskList(taskList []Task, taskId int) []Task {
-	for i := 0; i < len(taskList); i++ { //update taskList
-		if taskList[i].taskId == taskId {
-			taskList = append(taskList[:i], taskList[i+1:]...)
+func UpdateTaskList(TaskList []Task, TaskID int) []Task {
+	for i := 0; i < len(TaskList); i++ { //update TaskList
+		if TaskList[i].TaskID == TaskID {
+			TaskList = append(TaskList[:i], TaskList[i+1:]...)
 		}
 	}
-	return taskList
+	return TaskList
 }
 
-func CheckTaskList(taskList []Task, taskId int) (string, int, int64) {
-	var fileName string
-	var workerId int
+func CheckTaskList(TaskList []Task, TaskID int) (string, int, int64) {
+	var FileName string
+	var WorkerID int
 	var time int64
 
-	for i := 0; i < len(taskList); i++ { //update taskList
-		if taskList[i].taskId == taskId {
-			fileName = taskList[i].files
-			workerId = taskList[i].workerId
-			time = taskList[i].time
+	for i := 0; i < len(TaskList); i++ { //update TaskList
+		if TaskList[i].TaskID == TaskID {
+			FileName = TaskList[i].Files
+			WorkerID = TaskList[i].WorkerID
+			time = TaskList[i].Time
 		}
 	}
-	return fileName, workerId, time
+	return FileName, WorkerID, time
 }
 
 func (m *Master) UpdateTaskMode() error {
-	if len(m.fileList) == 0 && len(m.taskList) == 0 {
-		m.mapDone = true
+	if len(m.FileList) == 0 && len(m.TaskList) == 0 {
+		m.MapDone = true
 		files, _ := ioutil.ReadDir("./")
 
 		// Update the filelist to reduce files
-		rFileList := make([]string, m.nReduce)
-		for r := 0; r < m.nReduce; r++ {
+		rFileList := make([]string, m.NReduce)
+		for r := 0; r < m.NReduce; r++ {
 			for _, f := range files {
 				pattern := fmt.Sprintf("mr-\\d*-%v", r)
 				matched, _ := regexp.MatchString(pattern, f.Name())
@@ -165,14 +164,14 @@ func (m *Master) UpdateTaskMode() error {
 				}
 			}
 		}
-		m.fileList = rFileList
+		m.FileList = rFileList
 	}
 	return nil
 }
 
 func (m *Master) ClearIntermediate() error {
 	// Update the filelist to reduce files
-	for r := 0; r < m.nReduce; r++ {
+	for r := 0; r < m.NReduce; r++ {
 		files, _ := ioutil.ReadDir("./")
 		for _, f := range files {
 			pattern := fmt.Sprintf("mr-\\d*-%v", r)
@@ -190,24 +189,21 @@ func (m *Master) ClearIntermediate() error {
 //HINT: when a task is failed, master should reschedule it.
 func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error {
 	m.RPTMutex.Lock()
-	msg := args.msg
+	msg := args.Msg
 
 	if msg == "failed" {
-		var fileName string
-		fileName, _, _ = CheckTaskList(m.taskList, args.taskId)
-		m.taskList = UpdateTaskList(m.taskList, args.taskId)
-		m.fileList = append(m.fileList, fileName)
-		// reply.taskMode = "wait"
+		var FileName string
+		FileName, _, _ = CheckTaskList(m.TaskList, args.TaskID)
+		m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
+		m.FileList = append(m.FileList, FileName)
 	} else if msg == "done" {
-		m.taskList = UpdateTaskList(m.taskList, args.taskId)
+		m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
 		m.UpdateTaskMode()
-		// reply.taskMode = "wait"
 	} else if msg == "working" {
 		time1 := time.Now().Unix()
-		_, _, time0 := CheckTaskList(m.taskList, args.taskId)
+		_, _, time0 := CheckTaskList(m.TaskList, args.TaskID)
 		if time0-time1 > 10 {
-			m.taskList = UpdateTaskList(m.taskList, args.taskId)
-			// reply.taskMode = "wait"
+			m.TaskList = UpdateTaskList(m.TaskList, args.TaskID)
 		}
 	}
 	m.RPTMutex.Unlock()
@@ -217,15 +213,15 @@ func (m *Master) ReportTask(args *ReportTaskArgs, reply *ReportTaskReply) error 
 //
 // create a Master.
 //
-func MakeMaster(files []string, nReduce int) *Master {
+func MakeMaster(files []string, NReduce int) *Master {
 	m := Master{}
 	// Your code here.
-	m.fileList = files
-	m.nReduce = nReduce
-	m.workerNum = 0
-	m.taskId = 0
-	m.mapDone = false
-	m.allDone = false
+	m.FileList = files
+	m.NReduce = NReduce
+	m.WorkerNum = 0
+	m.TaskID = 0
+	m.MapDone = false
+	m.AllDone = false
 
 	go m.server()
 

@@ -44,11 +44,13 @@ func Worker(mapf func(string, string) []KeyValue,
 	// Your worker implementation here.
 
 	// Register workers for map
-	nReduce, workerId := Register()
+	nReduce, workerID := Register()
+
+	DPrintf("1.Registered")
 
 	for {
 		// Request map task
-		fileName, taskMode, taskId := Request(workerId)
+		fileName, taskMode, taskID := Request(workerID)
 
 		if taskMode == "wait" {
 			// No task assigned, waiting for master
@@ -60,17 +62,18 @@ func Worker(mapf func(string, string) []KeyValue,
 		} else if taskMode == "map" {
 			// Map
 			// Report to master that the work has started
-			Report(workerId, taskId, taskMode, "working")
+			Report(workerID, taskID, taskMode, "working")
+			DPrintf("2.Map")
 
 			intermediate := []KeyValue{}
 			file, err := os.Open(fileName)
 			if err != nil {
-				Report(workerId, taskId, taskMode, "failed")
+				Report(workerID, taskID, taskMode, "failed")
 				break
 			}
 			content, err := ioutil.ReadAll(file)
 			if err != nil {
-				Report(workerId, taskId, taskMode, "failed")
+				Report(workerID, taskID, taskMode, "failed")
 				file.Close()
 				break
 			}
@@ -79,29 +82,29 @@ func Worker(mapf func(string, string) []KeyValue,
 			intermediate = append(intermediate, kva...)
 
 			// Split keys to nReduce files
-			imFiles := make([][]KeyValue, nReduce)
+			imfiles := make([][]KeyValue, nReduce)
 			for i := 0; i < len(intermediate); i++ {
 				kv := intermediate[i]
 				r := ihash(kv.Key) % nReduce
-				imFiles[r] = append(imFiles[r], kv)
+				imfiles[r] = append(imfiles[r], kv)
 			}
 
 			// Generate intermediate files for nReduce workers
 			for r := 0; r < nReduce; r++ {
-				imFileName := fmt.Sprintf("mr-%v-%v", taskId, r)
-				imFile, _ := os.Create(imFileName)
-				enc := json.NewEncoder(imFile)
-				for _, kv := range imFiles[r] {
+				imfileName := fmt.Sprintf("mr-%v-%v", taskID, r)
+				imfile, _ := os.Create(imfileName)
+				enc := json.NewEncoder(imfile)
+				for _, kv := range imfiles[r] {
 					enc.Encode(&kv)
 				}
-				imFile.Close()
+				imfile.Close()
 			}
 			// Report to master that the work has finished
-			Report(workerId, taskId, taskMode, "done")
+			Report(workerID, taskID, taskMode, "done")
 		} else if taskMode == "reduce" {
 			//Reduce
 			// Report to master that the work has started
-			Report(workerId, taskId, taskMode, "working")
+			Report(workerID, taskID, taskMode, "working")
 
 			intermediate := []KeyValue{}
 			files := strings.Split(fileName, " ")
@@ -124,7 +127,7 @@ func Worker(mapf func(string, string) []KeyValue,
 				}
 			}
 			if reduceFailed == true {
-				Report(workerId, taskId, taskMode, "failed")
+				Report(workerID, taskID, taskMode, "failed")
 				break
 			}
 
@@ -132,8 +135,8 @@ func Worker(mapf func(string, string) []KeyValue,
 			sort.Sort(ByKey(intermediate))
 
 			// Reduce
-			outputName := fmt.Sprintf("mr-out-%v", taskId)
-			outputFile, _ := os.Create(outputName)
+			outputName := fmt.Sprintf("mr-out-%v", taskID)
+			outputfile, _ := os.Create(outputName)
 			i := 0
 			for i < len(intermediate) {
 				j := i + 1
@@ -147,15 +150,15 @@ func Worker(mapf func(string, string) []KeyValue,
 				output := reducef(intermediate[i].Key, values)
 
 				// Out the reduced files
-				fmt.Fprintf(outputFile, "%v %v\n", intermediate[i].Key, output)
+				fmt.Fprintf(outputfile, "%v %v\n", intermediate[i].Key, output)
 
 				i = j
 			}
 			// Report to master that the work has finished
-			Report(workerId, taskId, taskMode, "done")
+			Report(workerID, taskID, taskMode, "done")
 		} else {
 			// Wrong mode, work failed
-			Report(workerId, taskId, taskMode, "failed")
+			Report(workerID, taskID, taskMode, "failed")
 		}
 
 		// uncomment to send the Example RPC to the master.
@@ -166,35 +169,34 @@ func Worker(mapf func(string, string) []KeyValue,
 func Register() (int, int) {
 	args := RegisterWorkerArgs{}
 	reply := RegisterWorkerReply{}
-	for call("Master.RegisterWorker", &args, &reply) == false {
-		time.Sleep(time.Second)
-	}
-	nReduce := reply.nReduce
-	workerId := reply.workerId
-	// DPrintf("Got workerId %v\n", workerId)
-	return nReduce, workerId
+	call("Master.RegisterWorker", &args, &reply)
+	nReduce := reply.NReduce
+	workerID := reply.WorkerID
+	// DPrintf("Cannot read %v ===", nReduce)
+	return nReduce, workerID
 }
 
-func Request(workerId int) (string, string, int) {
+func Request(workerID int) (string, string, int) {
 	args := RequestTaskArgs{
-		workerId: workerId,
+		WorkerID: workerID,
 	}
 	reply := RequestTaskReply{}
 	for call("Master.RequestTask", &args, &reply) == false {
+		DPrintf("Cannot read")
 		time.Sleep(time.Second)
 	}
-	fileName := reply.fileName
-	taskMode := reply.taskMode
-	taskId := reply.taskId
-	return fileName, taskMode, taskId
+	fileName := reply.FileName
+	taskMode := reply.TaskMode
+	taskID := reply.TaskID
+	return fileName, taskMode, taskID
 }
 
-func Report(workerId int, taskId int, taskMode string, msg string) {
+func Report(workerID int, taskID int, taskMode string, msg string) {
 	args := ReportTaskArgs{
-		workerId: workerId,
-		taskId:   taskId,
-		taskMode: taskMode,
-		msg:      msg,
+		WorkerID: workerID,
+		TaskID:   taskID,
+		TaskMode: taskMode,
+		Msg:      msg,
 	}
 	reply := ReportTaskReply{}
 	for call("Master.ReportTask", &args, &reply) == false {

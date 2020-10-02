@@ -21,29 +21,28 @@ type RegisterWorkerArgs struct {
 }
 
 type RegisterWorkerReply struct {
-	nReduce  int
-	workerId int
+	NReduce  int
+	WorkerID int
 }
 
 type RequestTaskArgs struct {
-	workerId int
+	WorkerID int
 }
 
 type RequestTaskReply struct {
-	fileName string
-	taskMode string
-	taskId   int
+	FileName string
+	TaskMode string
+	TaskID   int
 }
 
 type ReportTaskArgs struct {
-	workerId int
-	taskId   int
-	taskMode string
-	msg      string
+	WorkerID int
+	TaskID   int
+	TaskMode string
+	Msg      string
 }
 
 type ReportTaskReply struct {
-	taskMode string
 }
 
 // Add your RPC definitions here.

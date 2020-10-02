@@ -12,10 +12,10 @@ import (
 
 type Task struct {
 	//@TODO Your definitions here.
-	taskId   int
-	files    string
-	workerId int
-	time     int64
+	TaskID   int
+	Files    string
+	WorkerID int
+	Time     int64
 }
 
 // jobPhase indicates whether a task is scheduled as a map or reduce task.
