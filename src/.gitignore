@@ -2,5 +2,9 @@
 mrtmp.*
 /main/diff.out
 /mapreduce/x.txt
+.cache/
 mr-*
 *.so
+mrmaster
+mrsequential
+mrworker
