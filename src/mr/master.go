@@ -18,6 +18,7 @@ type Master struct {
 
 	workerNum int
 	taskId    int
+	mapDone   bool
 	allDone   bool
 
 	RWMutex  sync.Mutex
@@ -56,20 +57,7 @@ func (m *Master) server() {
 // if the entire job has finished.
 //
 func (m *Master) Done() bool {
-
-	// Your code here.
 	return m.allDone
-}
-
-func (m *Master) doneMap() bool {
-	ret := false
-
-	// Your code here.
-	if len(m.inputFiles) == 0 && len(m.taskList) == 0 {
-		ret = true
-	}
-
-	return ret
 }
 
 //RegisterWorker is an RPC method that is called by workers after they have started
@@ -88,7 +76,7 @@ func (m *Master) RegisterWorker(args *RegisterWorkerArgs, reply *RegisterWorkerR
 func (m *Master) RequestTask(args *RequestTaskArgs, reply *RequestTaskReply) error {
 	m.RQTMutex.Lock()
 	if m.allDone == false {
-		if m.doneMap() == false { //map task
+		if m.mapDone == false { //map task
 			if len(m.inputFiles) != 0 {
 				m.taskId++
 				time := time.Now().Unix()
@@ -178,6 +166,7 @@ func MakeMaster(files []string, nReduce int) *Master {
 	m.inputFiles = files
 	m.workerNum = 0
 	m.taskId = 0
+	m.mapDone = false
 	m.allDone = false
 
 	go m.server()
