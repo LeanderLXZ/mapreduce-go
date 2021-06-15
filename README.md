@@ -1,4 +1,6 @@
-# mapreduce
+# MapReduce
+### A MapReduce implementation based on Golang.
+***
 - nReduce  = number of intermediate files
 - master map:
     - one list stores rest files
